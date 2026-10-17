@@ -1,4 +1,4 @@
-//! Keyboard renderer: the F75 (black edition) drawn as simple 3D geometry and projected with an
+//! Keyboard renderer: the F75 in any of its official colourways, drawn as simple 3D geometry and projected with an
 //! orthographic camera. Pitch 0 is the flat top view; the 3D view tilts and turns the same model.
 //! Units are the layout canvas (1u key pitch ~38.5, ~2 units per mm).
 use crate::layout::{Key, KEYS};
@@ -44,22 +44,91 @@ fn plate_z(y: f32) -> f32 {
     case_z(y) - 8.0
 }
 
-const CHASSIS: Color32 = Color32::from_rgb(0x15, 0x15, 0x18);
-const PLATE: Color32 = Color32::from_rgb(0x09, 0x09, 0x0b);
-const BLUE: Color32 = Color32::from_rgb(0x34, 0x38, 0x50);
-const BLACK: Color32 = Color32::from_rgb(0x1d, 0x1e, 0x24);
-const YELLOW: Color32 = Color32::from_rgb(0xdc, 0xa6, 0x40);
-const LEGEND: Color32 = Color32::from_rgb(0xf2, 0xc2, 0x7a);
-const LEGEND_DARK: Color32 = Color32::from_rgb(0x1a, 0x16, 0x10);
 const SILVER: Color32 = Color32::from_rgb(0x8a, 0x8a, 0x92);
-const KNOB_CAP: Color32 = Color32::from_rgb(0x15, 0x16, 0x1a);
 
-fn cap_colour(k: &Key) -> Color32 {
-    match k.vk {
-        0x1B | 0x0D | 0x20 | 0x25..=0x28 => YELLOW,
-        0x74..=0x77 => BLACK, // F5-F8
-        0x08 | 0x2E | 0x21 | 0x22 | 0x23 | 0x09 | 0x14 | 0xA0 | 0xA1 | 0xA2 | 0xA3 | 0x5B | 0xA4 | 0xFA => BLACK,
-        _ => BLUE,
+const fn rgb(c: u32) -> Color32 {
+    Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
+}
+
+/// One of AULA's F75 colourways (aulagear.com), colours sampled from AULA's product photos.
+/// The keyboard can't report which one it is, so the user picks it.
+pub struct Skin {
+    pub name: &'static str,
+    case: Color32,
+    plate: Color32,
+    alpha: Color32,
+    modifier: Color32,
+    accent: Color32, // Esc, Enter, Space, arrows
+    legend: Color32,
+    legend_mod: Color32,
+    legend_accent: Color32,
+    knob_cap: Color32,
+    rows: Option<[u32; 6]>, // gradient sets: one cap colour per row (F row first), side-printed legends
+}
+
+const fn two_tone(name: &'static str, c: [u32; 9]) -> Skin {
+    Skin { name, case: rgb(c[0]), plate: rgb(c[1]), alpha: rgb(c[2]), modifier: rgb(c[3]), accent: rgb(c[4]), legend: rgb(c[5]),
+        legend_mod: rgb(c[6]), legend_accent: rgb(c[7]), knob_cap: rgb(c[8]), rows: None }
+}
+
+const fn gradient(name: &'static str, case: u32, plate: u32, knob_cap: u32, rows: [u32; 6]) -> Skin {
+    let c = rgb(rows[0]);
+    Skin { name, case: rgb(case), plate: rgb(plate), alpha: c, modifier: c, accent: c, legend: c, legend_mod: c, legend_accent: c,
+        knob_cap: rgb(knob_cap), rows: Some(rows) }
+}
+
+//                              case      plate     alpha     modifier  accent    legend    on mod    on accent knob cap
+pub const SKINS: &[Skin] = &[
+    two_tone("Black", [0x151418, 0x09090b, 0x343850, 0x1d1e24, 0xdca640, 0xf2c27a, 0xf2c27a, 0x1a1610, 0x15161a]),
+    two_tone("Light Blue", [0xe2dfdc, 0xc9c5c2, 0xe6e6e3, 0xc3cdd7, 0x25262f, 0x2a2c36, 0x2a2c36, 0xeeeeec, 0xd8d8dc]),
+    two_tone("Green", [0x8a8f9f, 0xb3a69e, 0xd8c9c0, 0x959aad, 0x74867e, 0x6f7488, 0xeeeae6, 0xe6dcd2, 0xd8d8dc]),
+    two_tone("Sea Salt Blue", [0xbccddc, 0xcfd2d4, 0xdedede, 0xb6c3d0, 0x9cadc9, 0x8fa2bf, 0xf2f4f7, 0xf2f4f7, 0xd8d8dc]),
+    two_tone("Purple", [0xc6b1d9, 0xe2e0dc, 0xe8e7e3, 0xc4b0d8, 0xe3ddc9, 0x9a84c2, 0xf6f2fa, 0x9a84c2, 0xe0d8e6]),
+    gradient("Blue (Side-Printed)", 0xebe9e6, 0xdcdad6, 0xd8d8dc, [0xe8e8e5, 0xc9dcea, 0xa8cbea, 0x92bce8, 0x7aa9e0, 0x6c9be0]),
+    gradient("Black (Side-Printed)", 0x1e1e1f, 0x101011, 0x15161a, [0xb0aaa4, 0x9c9994, 0x7c7e79, 0x5f605d, 0x555859, 0x4a4c4e]),
+    gradient("Black Pink (Side-Printed)", 0x0e0e0f, 0x09090a, 0x15161a, [0x3a383e, 0x4a424c, 0x6e5462, 0xb07483, 0xe2899a, 0xf4aeb8]),
+    gradient("Gradient Pink", 0xe6b7b4, 0xd2a5a3, 0xd8d8dc, [0xe2d6d6, 0xdccacc, 0xd8b8bc, 0xdca6ad, 0xdb96a1, 0xd98b97]),
+];
+
+pub fn skin(name: &str) -> &'static Skin {
+    SKINS.iter().find(|s| s.name == name).unwrap_or(&SKINS[0])
+}
+
+fn luma(c: Color32) -> f32 {
+    (0.299 * c.r() as f32 + 0.587 * c.g() as f32 + 0.114 * c.b() as f32) / 255.0
+}
+
+impl Skin {
+    fn cap(&self, k: &Key) -> Color32 {
+        if let Some(rows) = self.rows {
+            let row = if k.rect[1] < 70.0 { 0 } else { (1.0 + (k.rect[1] - 81.0) / 38.5).round() as usize };
+            return rgb(rows[row.min(5)]);
+        }
+        match k.vk {
+            0x1B | 0x0D | 0x20 | 0x25..=0x28 => self.accent,
+            0x74..=0x77 => self.modifier, // F5-F8
+            0x08 | 0x2E | 0x21 | 0x22 | 0x23 | 0x09 | 0x14 | 0xA0 | 0xA1 | 0xA2 | 0xA3 | 0x5B | 0xA4 | 0xFA => self.modifier,
+            _ => self.alpha,
+        }
+    }
+
+    fn ink(&self, base: Color32) -> Color32 {
+        if self.rows.is_some() {
+            // the real legends are on the front of the caps; keep a faint print on top so keys stay findable
+            let to = if luma(base) > 0.55 { Color32::BLACK } else { Color32::WHITE };
+            return mix(base, to, 0.28);
+        }
+        if base == self.accent {
+            self.legend_accent
+        } else if base == self.modifier {
+            self.legend_mod
+        } else {
+            self.legend
+        }
+    }
+
+    fn light(&self) -> bool {
+        luma(self.case) > 0.5
     }
 }
 
@@ -371,6 +440,7 @@ pub struct Marks {
     pub selected: Option<(usize, f32)>, // key, pulse 0..1
     pub remapped: Vec<bool>,
     pub accent: Color32,
+    pub skin: &'static Skin,
 }
 
 struct KeyGeo {
@@ -416,6 +486,7 @@ pub fn knob(view: &View) -> (Pos2, f32) {
 }
 
 pub fn paint(painter: &Painter, view: &View, colours: &[[u8; 3]], marks: &Marks, brightness: f32, knob_hot: bool) {
+    let skin = marks.skin;
     let tex = painter.fonts(|f| f.font_image_size());
     let light = [-0.35f32, -0.94f32];
     let shade = |n: [f32; 2]| 0.62 + 0.30 * (n[0] * light[0] + n[1] * light[1]);
@@ -453,13 +524,13 @@ pub fn paint(painter: &Painter, view: &View, colours: &[[u8; 3]], marks: &Marks,
             continue;
         }
         let (a, b) = (case[i], case[j]);
-        let c = mul(CHASSIS, shade(cn[i]) * 0.9);
+        let c = mul(skin.case, shade(cn[i]) * 0.9);
         quad(&mut m, [view.p([a[0], a[1], 0.0]), view.p([b[0], b[1], 0.0]), view.p([b[0], b[1], case_z(b[1])]), view.p([a[0], a[1], case_z(a[1])])],
             [mul(c, 0.7), mul(c, 0.7), c, c]);
     }
     let top: Vec<Pos2> = case.iter().map(|p| view.p([p[0], p[1], case_z(p[1])])).collect();
-    let cols: Vec<Color32> = case.iter().map(|p| mul(CHASSIS, 1.15 - 0.25 * (p[1] - CASE[1]) / (CASE[3] - CASE[1]))).collect();
-    fan(&mut m, &top, &cols, CHASSIS);
+    let cols: Vec<Color32> = case.iter().map(|p| mul(skin.case, 1.15 - 0.25 * (p[1] - CASE[1]) / (CASE[3] - CASE[1]))).collect();
+    fan(&mut m, &top, &cols, skin.case);
     let tray = rounded(TRAY, 8.0);
     let tn = normals(&tray);
     for i in 0..tray.len() {
@@ -469,12 +540,12 @@ pub fn paint(painter: &Painter, view: &View, colours: &[[u8; 3]], marks: &Marks,
             continue;
         }
         let (a, b) = (tray[i], tray[j]);
-        let c = mul(CHASSIS, shade(inward) * 0.55);
+        let c = mul(skin.case, shade(inward) * 0.55);
         quad(&mut m, [view.p([a[0], a[1], case_z(a[1])]), view.p([b[0], b[1], case_z(b[1])]), view.p([b[0], b[1], plate_z(b[1])]), view.p([a[0], a[1], plate_z(a[1])])],
             [c, c, mul(c, 0.6), mul(c, 0.6)]);
     }
     let plate: Vec<Pos2> = tray.iter().map(|p| view.p([p[0], p[1], plate_z(p[1])])).collect();
-    fan(&mut m, &plate, &vec![PLATE; plate.len()], PLATE);
+    fan(&mut m, &plate, &vec![skin.plate; plate.len()], skin.plate);
     painter.add(Shape::mesh(m));
     painter.add(Shape::closed_line(top.clone(), Stroke::new(1.0, Color32::from_white_alpha(14))));
     let tray_top: Vec<Pos2> = tray.iter().map(|p| view.p([p[0], p[1], case_z(p[1])])).collect();
@@ -510,17 +581,17 @@ pub fn paint(painter: &Painter, view: &View, colours: &[[u8; 3]], marks: &Marks,
 
     for (_, it) in items {
         let Some(i) = it else {
-            paint_knob(painter, view, brightness, knob_hot, marks.accent, light);
+            paint_knob(painter, view, brightness, knob_hot, marks.accent, light, skin);
             continue;
         };
         let k = &KEYS[i];
         let g = key_geo(k);
-        let base = cap_colour(k);
+        let base = skin.cap(k);
         let c = colours[k.led as usize];
         let led = Color32::from_rgb(c[0], c[1], c[2]);
         let lit = c[0].max(c[1]).max(c[2]) as f32 / 255.0;
         let hot = marks.hovered == Some(i);
-        let face = if hot { mul(base, 1.25) } else { base };
+        let face = if !hot { base } else if luma(base) > 0.7 { mul(base, 0.88) } else { mul(base, 1.25) };
         let z1 = g.z0 + CAP_H;
         let zf = |_y: f32| z1;
 
@@ -545,7 +616,7 @@ pub fn paint(painter: &Painter, view: &View, colours: &[[u8; 3]], marks: &Marks,
         painter.add(Shape::mesh(m));
         painter.add(Shape::closed_line(top.clone(), Stroke::new(0.8, mul(face, 1.45).gamma_multiply(0.6))));
 
-        let ink = if base == YELLOW { LEGEND_DARK } else { LEGEND };
+        let ink = skin.ink(base);
         for lg in legends(k) {
             print(painter, view, g.top_rect, &zf, &lg, ink, tex);
         }
@@ -561,7 +632,7 @@ pub fn paint(painter: &Painter, view: &View, colours: &[[u8; 3]], marks: &Marks,
     }
 }
 
-fn paint_knob(painter: &Painter, view: &View, brightness: f32, hot: bool, accent: Color32, light: [f32; 2]) {
+fn paint_knob(painter: &Painter, view: &View, brightness: f32, hot: bool, accent: Color32, light: [f32; 2], skin: &Skin) {
     let z0 = case_z(KNOB[1]);
     let z1 = z0 + 12.0;
     let ring = circle(KNOB, KNOB_R, 40);
@@ -576,7 +647,7 @@ fn paint_knob(painter: &Painter, view: &View, brightness: f32, hot: bool, accent
             view.p([KNOB[0] + arc_r * a.cos(), KNOB[1] + arc_r * a.sin(), z0])
         }).collect()
     };
-    painter.add(Shape::line(arc(a0, a1), Stroke::new(2.5, Color32::from_white_alpha(18))));
+    painter.add(Shape::line(arc(a0, a1), Stroke::new(2.5, if skin.light() { Color32::from_black_alpha(40) } else { Color32::from_white_alpha(18) })));
     if brightness > 0.0 {
         let a = a0 + (a1 - a0) * brightness;
         painter.add(Shape::line(arc(a0, a), Stroke::new(6.0, accent.gamma_multiply(0.12))));
@@ -602,8 +673,8 @@ fn paint_knob(painter: &Painter, view: &View, brightness: f32, hot: bool, accent
     fan(&mut m, &top, &cols, SILVER);
     let cap = circle(KNOB, KNOB_R * 0.74, 40);
     let cap_p: Vec<Pos2> = cap.iter().map(|p| view.p([p[0], p[1], z1 + 0.5])).collect();
-    let cap_c: Vec<Color32> = cap.iter().map(|p| mul(KNOB_CAP, 1.0 + 0.5 * ((KNOB[1] - p[1]) / KNOB_R).max(0.0))).collect();
-    fan(&mut m, &cap_p, &cap_c, KNOB_CAP);
+    let cap_c: Vec<Color32> = cap.iter().map(|p| mul(skin.knob_cap, 1.0 + 0.5 * ((KNOB[1] - p[1]) / KNOB_R).max(0.0))).collect();
+    fan(&mut m, &cap_p, &cap_c, skin.knob_cap);
     painter.add(Shape::mesh(m));
     painter.add(Shape::closed_line(top, Stroke::new(1.0, if hot { accent } else { Color32::from_white_alpha(40) })));
     let a = a0 + (a1 - a0) * brightness;

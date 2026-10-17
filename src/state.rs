@@ -205,3 +205,16 @@ pub fn keymap_backup(layer: u8, current: &[u8]) -> Vec<u8> {
     let _ = std::fs::write(&p, current);
     current.to_vec()
 }
+
+/// The user's F75 colourway (a kbview::SKINS name) in keyboard.txt; the keyboard can't report it.
+pub fn colourway() -> String {
+    std::fs::read_to_string(dir().join("keyboard.txt"))
+        .ok()
+        .and_then(|t| t.lines().find_map(|l| l.strip_prefix("colourway=").map(String::from)))
+        .unwrap_or_default()
+}
+
+pub fn set_colourway(name: &str) {
+    let _ = std::fs::create_dir_all(dir());
+    let _ = std::fs::write(dir().join("keyboard.txt"), format!("colourway={name}\n"));
+}

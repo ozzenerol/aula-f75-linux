@@ -96,7 +96,8 @@ Lighting, remaps and macros already written to the keyboard stay on it.
 * **Studio FX** (USB-C): Wave, Breathe, Twinkle, Plasma, Matrix Rain and Fire at
   about 50 fps, with 8 palettes.
 * **Audio sync** (USB-C): Spectrum and Mirror, driven by whatever is playing.
-* **2D and 3D views** of the keyboard in its real colours. In 3D: scroll or pinch
+* **2D and 3D views** of the keyboard in its real colours, drawn in your F75's
+  colourway (pick it next to the 2D/3D switch; the keyboard can't report it). In 3D: scroll or pinch
   to zoom, drag empty space to turn, middle-drag to pan, double-click to reset.
 * **Keys:** remap any key on the base or Fn layer; restore the factory layout
   at any time.

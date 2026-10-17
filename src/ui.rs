@@ -4,7 +4,7 @@ use crate::kbview;
 use crate::layout::{CANVAS, KEYS};
 use crate::macros;
 use crate::protocol::{self as p, Link, EFFECTS, LED_COUNT, PALETTE, RANDOM_COLOUR};
-use crate::state::{MacroDef, Profile};
+use crate::state::{self, MacroDef, Profile};
 use crate::worker::{fx_by_name, macro_buffer, mode_index, sleep_label, Colours, Core, Event, Job, Live};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -51,6 +51,7 @@ pub struct App {
     lv: Live,
     core: Arc<Core>,
     view3d: bool,
+    skin: &'static kbview::Skin,
     cam: kbview::Cam,
     cam3d: kbview::Cam,
     zoom: f32,
@@ -70,7 +71,6 @@ pub struct App {
     filter: String,
     macro_name: String,
     macro_text: String,
-    toasts: egui_notify::Toasts,
     targets: Vec<(String, [u8; 4])>,
     perm_issue: bool,
     perm_fix: Arc<Mutex<Option<Result<(), String>>>>,
@@ -90,6 +90,7 @@ impl App {
             lv,
             core,
             view3d: false,
+            skin: kbview::skin(&state::colourway()),
             cam: kbview::Cam::TOP,
             cam3d: kbview::Cam::ISO,
             zoom: 1.0,
@@ -113,7 +114,6 @@ impl App {
             filter: String::new(),
             macro_name: "Macro".into(),
             macro_text: String::new(),
-            toasts: egui_notify::Toasts::default().with_anchor(egui_notify::Anchor::BottomRight),
             targets: p::targets(),
             perm_issue: false,
             perm_fix: Arc::new(Mutex::new(None)),
@@ -123,7 +123,6 @@ impl App {
 
     fn send(&mut self, job: Job) {
         if self.link == Some(Link::Bluetooth) && !matches!(job, Job::Poll | Job::LoadKeymap(_)) {
-            self.toasts.info("Switch the F75 to 2.4G or USB-C to change settings");
             return;
         }
         self.busy = true;
@@ -167,7 +166,6 @@ impl App {
         self.lv.palette = self.s.palette;
         self.rename = self.s.name.clone();
         self.profiles = Profile::list();
-        self.toasts.info(format!("Profile: {}", self.s.name));
         if self.link.is_some_and(|l| l != Link::Bluetooth) {
             let pr = Box::new(self.s.clone());
             self.send(Job::ApplyProfile(pr));
@@ -254,22 +252,14 @@ impl App {
                     if l != Link::Wired && self.lv.streaming() {
                         self.lv.fx = None;
                         self.lv.audio = false;
-                        self.toasts.info("Live effects need the USB-C cable - showing the profile lighting");
                     }
-                    self.toasts.success(format!("AULA F75 connected · {}", l.name()));
                 }
                 Event::Lost(e) => {
                     self.busy = false;
                     self.perm_issue = e.contains("Permission denied");
-                    if self.link.is_some() {
-                        self.toasts.warning("Keyboard disconnected");
-                    }
                     self.link = None;
                 }
                 Event::Online(o) => {
-                    if self.online && !o {
-                        self.toasts.info("Keyboard asleep - press a key to wake it");
-                    }
                     self.online = o;
                 }
                 Event::Block { mode, brightness, speed, colour, sleep } => {
@@ -295,11 +285,8 @@ impl App {
                     self.s.save();
                     self.keymaps.insert(layer, (codes, backup));
                 }
-                Event::Done(m) => {
+                Event::Done => {
                     self.busy = false;
-                    if !m.is_empty() {
-                        self.toasts.success(m);
-                    }
                     if self.pending {
                         self.pending = false;
                         self.apply();
@@ -308,20 +295,15 @@ impl App {
                 Event::Error(e) => {
                     self.busy = false;
                     self.pending = false;
-                    self.toasts.error(e);
+                    eprintln!("{e}");
                 }
             }
         }
         if let Some(r) = self.perm_fix.lock().unwrap().take() {
             self.fixing = false;
             match r {
-                Ok(()) => {
-                    self.toasts.success("Permissions fixed - connecting…");
-                    self.perm_issue = false;
-                }
-                Err(e) => {
-                    self.toasts.error(e);
-                }
+                Ok(()) => self.perm_issue = false,
+                Err(e) => eprintln!("{e}"),
             }
         }
     }
@@ -372,7 +354,6 @@ impl eframe::App for App {
         egui::CentralPanel::no_frame()
             .frame(egui::Frame::new().fill(BG).inner_margin(Margin::same(26)))
             .show(ui, |ui| self.keyboard(ui, t, &colours));
-        self.toasts.show(ui.ctx());
         self.lv.palette = self.s.palette;
         self.lv.brightness = self.s.brightness;
         if self.lv != before {
@@ -503,6 +484,24 @@ impl App {
                     if ui.add(b).on_hover_text(if on { "3D view: scroll to zoom, drag empty space to turn, middle-drag to pan, double-click to reset" } else { "Flat top view" }).clicked() {
                         self.view3d = on;
                     }
+                }
+                ui.add_space(8.0);
+                let mut pick = None;
+                egui::ComboBox::from_id_salt("colourway")
+                    .selected_text(RichText::new(format!("{}  {}", icon::KEYBOARD, self.skin.name)).family(display()).size(15.0).color(TEXT))
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        for sk in kbview::SKINS {
+                            if ui.selectable_label(std::ptr::eq(sk, self.skin), RichText::new(sk.name).family(display()).size(15.0)).clicked() {
+                                pick = Some(sk);
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("Your F75's colourway (the keyboard can't report it)");
+                if let Some(sk) = pick {
+                    self.skin = sk;
+                    state::set_colourway(sk.name);
                 }
                 ui.add_space(12.0);
                 ui.label(RichText::new(hint).color(DIM));
@@ -653,7 +652,7 @@ impl App {
         if knob.drag_stopped() || (scroll != 0.0 && !knob.dragged()) {
             self.apply();
         }
-        let marks = kbview::Marks { hovered, selected, remapped, accent: ACC };
+        let marks = kbview::Marks { hovered, selected, remapped, accent: ACC, skin: self.skin };
         kbview::paint(&painter, &view, colours, &marks, self.s.brightness as f32 / 9.0, knob.hovered() || knob.dragged());
         if knob.hovered() || knob.dragged() {
             painter.text(kc + vec2(0.0, kr + 22.0), Align2::CENTER_CENTER, format!("BRIGHTNESS {}", self.s.brightness), FontId::new(13.0, display()), ACC);

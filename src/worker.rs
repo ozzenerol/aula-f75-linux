@@ -191,7 +191,7 @@ pub enum Event {
     Online(bool),
     Block { mode: usize, brightness: u8, speed: u8, colour: u8, sleep: u16 },
     Keymap { layer: u8, codes: Vec<[u8; 4]>, backup: Vec<[u8; 4]> },
-    Done(String),
+    Done,
     Error(String),
 }
 
@@ -438,8 +438,7 @@ impl Worker {
     fn handle(&mut self, job: Job) -> Option<Event> {
         let was_connected = self.kb.is_some();
         match self.run(job) {
-            Ok(Some(m)) => Some(Event::Done(m)),
-            Ok(None) => Some(Event::Done(String::new())),
+            Ok(_) => Some(Event::Done),
             Err(e) => Some(self.fail(e, was_connected)),
         }
     }
