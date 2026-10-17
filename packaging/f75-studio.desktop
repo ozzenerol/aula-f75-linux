@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=F75 Studio
+GenericName=Keyboard Lighting
+Comment=Per-key RGB, remapping, macros and audio sync for the AULA F75
+Exec=f75-studio
+Icon=f75-studio
+Terminal=false
+Categories=Settings;HardwareSettings;Utility;
+Keywords=keyboard;rgb;aula;f75;lighting;macro;
+StartupWMClass=f75-studio

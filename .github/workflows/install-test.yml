@@ -1,0 +1,122 @@
+# End-to-end installer and uninstaller test across supported Linux distros.
+# Logs only: no caching, no artifacts, no preinstalled Rust setup actions.
+name: Install Test
+
+on:
+  push:
+    branches:
+      - ci/install-test
+  workflow_dispatch:
+
+jobs:
+  ubuntu-host:
+    name: ubuntu-24.04 (host)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Remove preinstalled Rust from runner image
+        run: |
+          rm -rf "$HOME/.cargo" "$HOME/.rustup"
+          sudo rm -f /usr/local/bin/rustc /usr/local/bin/cargo /usr/local/bin/rustup
+
+      - name: Run install.sh and verify installation
+        run: |
+          ./install.sh
+          test -x "$HOME/.local/bin/f75-studio"
+          out=$("$HOME/.local/bin/f75-studio" quit 2>&1)
+          printf '%s\n' "$out"
+          grep -q "F75 Studio isn't running" <<<"$out"
+          grep -q "^Exec=/.*f75-studio$" "$HOME/.local/share/applications/f75-studio.desktop"
+          test -f /etc/udev/rules.d/70-aula-f75.rules
+
+      - name: Run uninstall.sh and verify removal
+        run: |
+          ./uninstall.sh
+          test ! -e "$HOME/.local/bin/f75-studio"
+          test ! -e "$HOME/.local/share/applications/f75-studio.desktop"
+          test ! -e /etc/udev/rules.d/70-aula-f75.rules
+
+  containers:
+    name: ${{ matrix.image }} (container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - debian:12
+          - archlinux:latest
+          - fedora:latest
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare sudo, non-root user and no-op udevadm shim
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.image }}" in
+            debian:*)
+              apt-get update
+              apt-get install -y sudo
+              ;;
+            archlinux:*)
+              pacman -Syu --noconfirm sudo
+              ;;
+            fedora:*)
+              dnf install -y sudo util-linux shadow-utils
+              ;;
+          esac
+
+          # udevd does not run in containers; place a no-op udevadm shim ahead of
+          # system paths on both PATH and sudo secure_path for the CI run.
+          install -Dm755 /dev/stdin /usr/local/sbin/udevadm <<'EOF'
+          #!/bin/sh
+          exit 0
+          EOF
+          [ /usr/local/sbin/udevadm -ef /usr/local/bin/udevadm ] || \
+            install -Dm755 /usr/local/sbin/udevadm /usr/local/bin/udevadm
+
+          useradd -m -s /bin/bash builder
+          cat > /etc/sudoers.d/builder <<'EOF'
+          Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          builder ALL=(ALL) NOPASSWD: ALL
+          EOF
+          chmod 0440 /etc/sudoers.d/builder
+
+          cp -a . /home/builder/aula-f75-linux
+          chown -R builder:builder /home/builder/aula-f75-linux
+
+      - name: Run install.sh and verify installation as non-root user
+        shell: bash
+        run: |
+          su - builder -c '
+            set -euo pipefail
+            export PATH="/usr/local/sbin:/usr/local/bin:$PATH"
+            cd "$HOME/aula-f75-linux"
+            ./install.sh
+            test -x "$HOME/.local/bin/f75-studio"
+            out=$("$HOME/.local/bin/f75-studio" quit 2>&1)
+            printf "%s\n" "$out"
+            grep -q "F75 Studio isn'\''t running" <<<"$out"
+            grep -q "^Exec=/.*f75-studio$" "$HOME/.local/share/applications/f75-studio.desktop"
+            test -f /etc/udev/rules.d/70-aula-f75.rules
+          '
+
+      - name: Run uninstall.sh and verify removal as non-root user
+        shell: bash
+        run: |
+          su - builder -c '
+            set -euo pipefail
+            export PATH="/usr/local/sbin:/usr/local/bin:$PATH"
+            cd "$HOME/aula-f75-linux"
+            ./uninstall.sh
+            test ! -e "$HOME/.local/bin/f75-studio"
+            test ! -e "$HOME/.local/share/applications/f75-studio.desktop"
+            test ! -e /etc/udev/rules.d/70-aula-f75.rules
+          '

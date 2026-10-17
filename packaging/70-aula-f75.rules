@@ -1,0 +1,10 @@
+# AULA F75: let the logged-in user open the keyboard's HID interfaces without sudo.
+# Must sort before Fedora's 73-seat-late.rules, which grants access to devices
+# already tagged "uaccess" (a 99- rule adds the tag too late -> Permission denied).
+
+# 2.4 GHz receiver (Compx 3554:fa09)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa09", TAG+="uaccess"
+# USB-C cable (258a:010c)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="010c", TAG+="uaccess"
+# Bluetooth LE (uhid, no USB attributes; HID device is named 0005:3554:FA08.xxxx)
+SUBSYSTEM=="hidraw", KERNELS=="0005:3554:[Ff][Aa]08.*", TAG+="uaccess"
