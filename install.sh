@@ -107,7 +107,7 @@ for d in /sys/class/hidraw/hidraw*; do
     id=$(grep -oE 'HID_ID=[0-9A-F:]+' "$d/device/uevent" | cut -d= -f2 || true)
     case "$id" in
         *:00003554:0000FA09) what="2.4G receiver" ;;
-        *:00003554:0000FA08) what="Bluetooth" ;;
+        *:00003554:0000FA07|*:00003554:0000FA08) what="Bluetooth" ;;
         *:0000258A:0000010C) what="USB-C cable" ;;
         *) continue ;;
     esac

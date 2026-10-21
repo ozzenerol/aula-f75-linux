@@ -6,5 +6,5 @@
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3554", ATTRS{idProduct}=="fa09", TAG+="uaccess"
 # USB-C cable (258a:010c)
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="010c", TAG+="uaccess"
-# Bluetooth LE (uhid, no USB attributes; HID device is named 0005:3554:FA08.xxxx)
-SUBSYSTEM=="hidraw", KERNELS=="0005:3554:[Ff][Aa]08.*", TAG+="uaccess"
+# Bluetooth (uhid, no USB attributes; HID device is 0005:3554:FA07.xxxx on BT 5.0, FA08 on BT 3.0)
+SUBSYSTEM=="hidraw", KERNELS=="0005:3554:[Ff][Aa]0[78].*", TAG+="uaccess"

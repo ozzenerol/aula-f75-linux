@@ -5,13 +5,10 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 const RECEIVER: (u16, u16) = (0x3554, 0xfa09);
-const BLUETOOTH: (u16, u16) = (0x3554, 0xfa08);
+const BT5: (u16, u16) = (0x3554, 0xfa07); // "AULA-F75 5.0 KB"
+const BT3: (u16, u16) = (0x3554, 0xfa08); // "AULA-F75 3.0 KB"
 const WIRED: (u16, u16) = (0x258a, 0x010c);
 
-/// AULA's driver only configures the F75 over the cable (and the receiver); over Bluetooth the
-/// keyboard returns one packet of each reply and config traffic breaks typing, so we never send.
-pub const BT_UNSUPPORTED: &str = "Bluetooth can't be configured - switch the F75 to the 2.4G receiver or USB-C to change settings. \
-They are stored on the keyboard and stay active over Bluetooth.";
 
 pub struct F75 {
     dev: Option<HidDevice>, // None = dry run
@@ -28,7 +25,7 @@ impl F75 {
     pub fn detect() -> Vec<(Link, String)> {
         let Ok(api) = HidApi::new() else { return vec![] };
         let list: Vec<_> = api.device_list().collect();
-        [(WIRED, Link::Wired), (RECEIVER, Link::Receiver), (BLUETOOTH, Link::Bluetooth)]
+        [(WIRED, Link::Wired), (RECEIVER, Link::Receiver), (BT5, Link::Bluetooth), (BT3, Link::Bluetooth)]
             .into_iter()
             .filter_map(|((v, pid), link)| {
                 list.iter()
@@ -42,7 +39,7 @@ impl F75 {
             .collect()
     }
 
-    /// Opens the preferred connection: cable, then 2.4G receiver, then Bluetooth (view only).
+    /// Opens the preferred connection: cable, then 2.4G receiver, then Bluetooth.
     pub fn open() -> Result<Self> {
         let (link, path) = Self::detect()
             .into_iter()
@@ -110,6 +107,8 @@ impl F75 {
     /// Commands with bit 7 set (live frames) are not acknowledged.
     fn wireless_write(&mut self, cmd: u8, sub: u8, data: &[u8], delay_ms: u64) -> Result<()> {
         let wants_ack = cmd & 0x80 == 0 && !self.dry();
+        // Bluetooth drops packets in both directions: wait less for a lost ack, retry more.
+        let (ack_ms, max_tries) = if self.link == Link::Bluetooth { (250, 10) } else { (1000, 4) };
         for (i, pk) in p::write_packets(cmd, sub, data).iter().enumerate() {
             let mut tries = 0;
             loop {
@@ -120,7 +119,7 @@ impl F75 {
                 }
                 let mut ack = None;
                 for _ in 0..20 {
-                    match self.recv20(1000)? {
+                    match self.recv20(ack_ms)? {
                         Some((raw, r)) if raw[1] == cmd => {
                             ack = Some(r);
                             break;
@@ -135,7 +134,7 @@ impl F75 {
                     _ => {}
                 }
                 tries += 1;
-                if tries > 4 {
+                if tries > max_tries {
                     bail!("no reply from keyboard (asleep or out of range?) - press a key and retry");
                 }
             }
@@ -144,7 +143,7 @@ impl F75 {
     }
 
     /// Multi-packet read. Chunks are placed by packet index and merged across retries (the radio
-    /// occasionally drops one); a read with gaps is never returned.
+    /// occasionally drops one, Bluetooth about half); a read with gaps is never returned.
     fn wireless_read(&mut self, cmd: u8, sub: u8, len: usize) -> Result<Vec<u8>> {
         if self.dry() {
             self.send20(&p::read_request(cmd, sub))?;
@@ -153,12 +152,13 @@ impl F75 {
         let mut out = vec![0u8; len.max(p::CHUNK)];
         let mut got: Vec<bool> = vec![];
         let mut total = 0usize;
-        for attempt in 0..4 {
+        let (attempts, gap_ms) = if self.link == Link::Bluetooth { (16, 150) } else { (4, 500) };
+        for attempt in 0..attempts {
             if attempt > 0 {
                 sleep(Duration::from_millis(60));
             }
             self.send20(&p::read_request(cmd, sub))?;
-            while let Some((pk, r)) = self.recv20(500)? {
+            while let Some((pk, r)) = self.recv20(gap_ms)? {
                 if r.cmd != cmd & 0x7f {
                     continue;
                 }
@@ -242,9 +242,6 @@ impl F75 {
     // ------------------------------------------------------------ shared
 
     pub fn write(&mut self, cmd: u8, sub: u8, data: &[u8], delay_ms: u64) -> Result<()> {
-        if self.link == Link::Bluetooth && !self.dry() {
-            bail!("{BT_UNSUPPORTED}");
-        }
         let t0 = Instant::now();
         if self.link == Link::Wired {
             self.wired_write(cmd, sub, data, delay_ms.min(20))?;
@@ -256,9 +253,6 @@ impl F75 {
     }
 
     pub fn read(&mut self, cmd: u8, sub: u8, len: usize) -> Result<Vec<u8>> {
-        if self.link == Link::Bluetooth && !self.dry() {
-            bail!("{BT_UNSUPPORTED}");
-        }
         let rc = cmd | self.cmds.read_flag;
         let out = if self.link == Link::Wired { self.wired_read(rc, sub, len)? } else { self.wireless_read(rc, sub, len)? };
         self.log.push(format!("read 0x{rc:02x}/{sub}: {} bytes", out.len()));

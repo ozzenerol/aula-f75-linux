@@ -25,7 +25,7 @@ for d in /sys/class/hidraw/hidraw*; do
     case "$id" in
         *:0000258A:0000010C) what="USB-C cable" ;;
         *:00003554:0000FA09) what="2.4G receiver" ;;
-        *:00003554:0000FA08) echo "Bluetooth only gives view-only access; use the cable or receiver." ; continue ;;
+        *:00003554:0000FA07|*:00003554:0000FA08) what="Bluetooth" ;;
         *) continue ;;
     esac
     node=/dev/$(basename "$d")

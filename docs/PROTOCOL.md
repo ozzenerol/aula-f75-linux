@@ -15,11 +15,14 @@ real F75 over the USB-C cable and the 2.4 GHz receiver. Values marked
 | Tooling | Ghidra 12.1.4 headless, scripts in `tools/ghidra` |
 | Device config | `app/Dev/kb/1/KB.ini`: `VID_Wireless=0x3554`, `PID_Wireless=0xfa09`, `MatrixLen=128`, `CRC=1` |
 
-Bluetooth (`3554:fa08`, "AULA-F75 3.0 KB") exposes the same vendor collection
-(usage page `0xFF02`, report `0x13`, 19 bytes in/out) as the receiver. On
-hardware only one packet of each multi-packet reply arrives and config traffic
-disrupts typing, and AULA's own software has no Bluetooth support, so
-f75-studio treats Bluetooth as view-only.
+Bluetooth (`3554:fa07` "AULA-F75 5.0 KB", `3554:fa08` "AULA-F75 3.0 KB")
+exposes the same vendor collection (usage page `0xFF02`, report `0x13`, 19
+bytes in/out) as the receiver and takes the same commands. AULA's own software
+has no Bluetooth support. Over BT 5.0 the keyboard sends every packet of a
+reply but the host receives a random half of them (e.g. indices 0,3,5,7,9 of
+10), so f75-studio repeats the read request and merges packets by index
+(up to 16 attempts, 150 ms gap). Write acks arrived for every packet in testing; a lost one
+is retried after 250 ms. An earlier BT 3.0 test got only one packet per reply.
 
 The receiver is driven by class `CDev3632` (vtable `0x0060dd6c`). High-level
 lighting code lives in `CDevG5KB`; when a receiver is present, every `CDevG5KB`

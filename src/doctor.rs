@@ -93,10 +93,6 @@ pub fn run(dry: Option<Link>) -> Result<()> {
         }
     };
     let link = kb.link;
-    if link == Link::Bluetooth && dry.is_none() {
-        r.say(crate::device::BT_UNSUPPORTED);
-        return finish(r, "bluetooth", None);
-    }
     kb.trace = Some(vec![]);
     r.result("open keyboard", true, format!("{} via {}", link.name(), kb.path));
     if link == Link::Receiver {
@@ -119,18 +115,15 @@ pub fn run(dry: Option<Link>) -> Result<()> {
         step(&mut r, &mut kb, "disable sleep during test", |k| k.set_sleep(0));
     }
     let readable = kb.log.iter().all(|l| !l.contains("using")) && original.is_some();
-    r.result("LED block read from keyboard", readable || link == Link::Bluetooth,
-        if readable { "".to_string() } else if link == Link::Bluetooth { "Bluetooth can't read it back - using saved copy/template (expected)".into() } else { "fell back to a saved copy".into() });
+    r.result("LED block read from keyboard", readable, if readable { "" } else { "fell back to a saved copy" });
 
     if step(&mut r, &mut kb, "set Rainbow", |k| k.set_effect(3, 9, 2, 0)).is_some() {
         r.result("effect: Rainbow", yes("Is the keyboard showing a moving RAINBOW effect?"), "");
     }
     if step(&mut r, &mut kb, "set Fixed On red", |k| k.set_effect(1, 9, 0, 0)).is_some() {
         r.result("effect: Fixed On red", yes("Is the whole keyboard SOLID RED now?"), "");
-        if link != Link::Bluetooth {
-            if let Some(b) = step(&mut r, &mut kb, "read back", |k| k.get_led_block()) {
-                r.result("read-back matches (mode 1)", b[10] == 1, format!("byte[10]={} byte[0x3a..0x3c]={}", b[10], hex(&b[0x3a..0x3c])));
-            }
+        if let Some(b) = step(&mut r, &mut kb, "read back", |k| k.get_led_block()) {
+            r.result("read-back matches (mode 1)", b[10] == 1, format!("byte[10]={} byte[0x3a..0x3c]={}", b[10], hex(&b[0x3a..0x3c])));
         }
     }
     let mut wasd = [[0u8; 3]; LED_COUNT];
@@ -179,10 +172,8 @@ pub fn run(dry: Option<Link>) -> Result<()> {
             let mut m = km.clone();
             m[caps * 4..caps * 4 + 4].copy_from_slice(&p::key_code(0x1d, 0)); // Caps Lock -> Z
             if step(&mut r, &mut kb, "remap Caps Lock to Z", |k| k.set_keymap(0, &m)).is_some() {
-                if link != Link::Bluetooth {
-                    if let Some(b) = step(&mut r, &mut kb, "read back", |k| k.get_keymap(0)) {
-                        r.result("remap read-back", b[caps * 4..caps * 4 + 4] == m[caps * 4..caps * 4 + 4], hex(&b[caps * 4..caps * 4 + 4]));
-                    }
+                if let Some(b) = step(&mut r, &mut kb, "read back", |k| k.get_keymap(0)) {
+                    r.result("remap read-back", b[caps * 4..caps * 4 + 4] == m[caps * 4..caps * 4 + 4], hex(&b[caps * 4..caps * 4 + 4]));
                 }
                 let typed = ask_raw("On the F75 press CAPS LOCK three times, then Enter:", |_| true);
                 r.result("remap works (Caps Lock types z)", typed.contains('z'), format!("typed {typed:?}"));

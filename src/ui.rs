@@ -122,9 +122,6 @@ impl App {
     }
 
     fn send(&mut self, job: Job) {
-        if self.link == Some(Link::Bluetooth) && !matches!(job, Job::Poll | Job::LoadKeymap(_)) {
-            return;
-        }
         self.busy = true;
         self.core.send(job);
     }
@@ -134,7 +131,7 @@ impl App {
         self.s.mode = EFFECTS[self.mode].0;
         self.s.fx = self.lv.fx.map(|f| format!("{f:?}")).unwrap_or_default();
         self.s.save();
-        if self.link.is_none() || self.link == Some(Link::Bluetooth) {
+        if self.link.is_none() {
             return;
         }
         if self.streaming() {
@@ -166,7 +163,7 @@ impl App {
         self.lv.palette = self.s.palette;
         self.rename = self.s.name.clone();
         self.profiles = Profile::list();
-        if self.link.is_some_and(|l| l != Link::Bluetooth) {
+        if self.link.is_some() {
             let pr = Box::new(self.s.clone());
             self.send(Job::ApplyProfile(pr));
         }
@@ -536,20 +533,6 @@ impl App {
                                     ctx.request_repaint();
                                 });
                             }
-                        });
-                    });
-                });
-            ui.add_space(12.0);
-        }
-        if self.link == Some(Link::Bluetooth) {
-            egui::Frame::new().fill(Color32::from_rgb(14, 26, 40)).corner_radius(12).stroke(Stroke::new(1.0, Color32::from_rgb(80, 160, 255)))
-                .inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(icon::BLUETOOTH).size(26.0).color(Color32::from_rgb(80, 160, 255)));
-                        ui.vertical(|ui| {
-                            ui.label(RichText::new("CONNECTED OVER BLUETOOTH · VIEW ONLY").family(display()).size(17.0).color(Color32::from_rgb(120, 180, 255)));
-                            ui.label(RichText::new("The F75 can't be configured over Bluetooth (it breaks typing). Switch to the 2.4G receiver or USB-C to change lighting or keys - your settings stay on the keyboard and keep working over Bluetooth.").color(TEXT));
                         });
                     });
                 });

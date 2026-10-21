@@ -130,10 +130,12 @@ Commands other than `quit` refuse to run while the app is open.
 |---|---|---|---|---|---|
 | USB-C cable | Yes | Yes | Yes | Yes | Yes |
 | 2.4G receiver | Yes | Yes | No | No | Yes |
-| Bluetooth | View only | No | No | No | No |
+| Bluetooth 5.0 | Yes | Yes | No | No | Yes |
 
-Settings made over the cable or 2.4G stay on the keyboard and keep working over
-Bluetooth.
+Bluetooth drops about half of the keyboard's replies, so reads are retried until
+complete and changes take a little longer than on 2.4G. Settings stay on the
+keyboard whatever the connection. The Bluetooth 3.0 channel (`3554:fa08`) is
+untested.
 
 ## Troubleshooting
 

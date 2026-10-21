@@ -1,7 +1,7 @@
 //! AULA F75 protocol, recovered from AULA's OemDrv.exe with Ghidra (docs/PROTOCOL.md).
 //!
 //! Two transports share the same payloads:
-//! * 2.4 GHz receiver (3554:fa09) and Bluetooth (3554:fa08): `CDev3632`, 20-byte report 0x13
+//! * 2.4 GHz receiver (3554:fa09) and Bluetooth (3554:fa07/fa08): `CDev3632`, 20-byte report 0x13
 //!   `[13 cmd total index (sub<<4)|len data*14 checksum]`, checksum = sum(bytes 0..19).
 //! * USB cable (258a:010c): `CDevG5KB`, 520-byte feature report 0x06
 //!   `[06 cmd sub 00 total index size_lo size_hi data*512]`.
